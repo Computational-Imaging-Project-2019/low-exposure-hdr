@@ -1,0 +1,3 @@
+Align      1035.14 ms
+Merge      2707.55 ms
+Finish     2459.82 ms
