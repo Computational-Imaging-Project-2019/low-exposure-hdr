@@ -32,7 +32,7 @@ def get_raw(input_dir, use_temp, verbose=True):
 
         # Run dcraw command to get tiffs
         dcraw_command = "dcraw -4 -D -T {}"
-        for dng_dir in dng_files:
+        for dng_dir in tqdm(dng_files):
             os.system(dcraw_command.format(dng_dir))
     
         # Find all the .tiff files
