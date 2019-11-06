@@ -6,7 +6,7 @@ import isp_helper
 import time
 
 def get_args():
-    parser = argparse.ArgumentParser(description="HDR+")
+    parser = argparse.ArgumentParser(description="HDR+: Low exposure images to HDR")
     parser.add_argument('-i', '--input', dest='input', default='./data/33TJ_20150612_201525_012', help='Enter the directory where the files are present')
     parser.add_argument('-o', '--output', dest='out', default='./results/', help='Enter the directory where the output files should be put')
     parser.add_argument('-v', '--verbose', dest='verbose', type=int,default=True, help='If 1, it will inform the steps on the console')
