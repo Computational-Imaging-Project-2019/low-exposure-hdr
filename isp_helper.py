@@ -6,7 +6,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
-def get_raw(input_dir, skip_raw):
+def get_raw(input_dir, use_temp):
     """Input: (str) input_dir
     Output: (np.ndarray) raw_imgs
 
@@ -14,7 +14,9 @@ def get_raw(input_dir, skip_raw):
 
     Note: This functions needs dcraw to be installed in your system."""
 
-    if not skip_raw:
+    raw_exists = os.path.isfile("./temp/raw_imgs.npy")
+
+    if (raw_exists == False) or (use_temp == False):
         # Find all the .dng files
         dng_files = glob.glob(input_dir + "/*.dng")
         dng_files.sort()
@@ -31,18 +33,20 @@ def get_raw(input_dir, skip_raw):
         for dng_dir in dng_files:
             os.system(dcraw_command.format(dng_dir))
     
-    # Find all the .tiff files
-    raw_files = glob.glob(input_dir + "/payload*.tiff")
-    raw_files.sort()
+        # Find all the .tiff files
+        raw_files = glob.glob(input_dir + "/payload*.tiff")
+        raw_files.sort()
 
-    # Read all raw files using plt
-    raw_imgs = []
-    for raw_dir in raw_files:
-        raw = plt.imread(raw_dir)
-        raw_imgs.append(raw)
+        # Read all raw files using plt
+        raw_imgs = []
+        for raw_dir in raw_files:
+            raw = plt.imread(raw_dir)
+            raw_imgs.append(raw)
 
-    raw_imgs = np.stack(raw_imgs)
-
+        raw_imgs = np.stack(raw_imgs)
+        np.save("./temp/raw_imgs.npy", raw_imgs)
+    else:
+        raw_imgs = np.load("./temp/raw_imgs.npy")
     return raw_imgs
 
 
