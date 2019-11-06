@@ -16,6 +16,8 @@ def get_args():
     return args
 
 def create_temp_dir():
+    """ Creates a temporary directory to save all the temp files
+    such that it can be loaded immediately"""
     temp_path = "./temp"
     exists = os.path.exists(temp_path)
     if not exists:
@@ -32,7 +34,7 @@ if __name__ == "__main__":
     create_temp_dir()
 
     # Create the raw files
-    raw_imgs = isp_helper.get_raw(args.input, args.temp)
+    raw_imgs = isp_helper.get_raw(args.input, args.temp, args.verbose)
 
 
     end_time = time.time()

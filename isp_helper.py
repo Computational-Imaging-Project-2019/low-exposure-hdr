@@ -6,7 +6,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
-def get_raw(input_dir, use_temp):
+def get_raw(input_dir, use_temp, verbose=True):
     """Input: (str) input_dir
     Output: (np.ndarray) raw_imgs
 
@@ -14,6 +14,8 @@ def get_raw(input_dir, use_temp):
 
     Note: This functions needs dcraw to be installed in your system."""
 
+    if verbose:
+        print("Loading Raw images...")
     raw_exists = os.path.isfile("./temp/raw_imgs.npy")
 
     if (raw_exists == False) or (use_temp == False):
