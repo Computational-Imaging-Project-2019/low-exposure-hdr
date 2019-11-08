@@ -52,8 +52,26 @@ if __name__ == "__main__":
     ref_frame_id = np.argmax(sharp)
     # average out Bayer BGGR values
     raw_imgs = raw_imgs.astype('double')
-    frames = (raw_imgs[:,1::2,0::2]+raw_imgs[:,0::2,0::2]+raw_imgs[:,1::2,1::2]+raw_imgs[:,0::2,1::2])/4
+    n,h,w = raw_imgs.shape
+    h = h//2
+    w = w//2
+    lvl0 = (raw_imgs[:,1::2,0::2]+raw_imgs[:,0::2,0::2]+raw_imgs[:,1::2,1::2]+raw_imgs[:,0::2,1::2])/4
+    lvl0 = np.pad(lvl0,((0,0),(0,32-(h%32)),(0,32-(w%32))),mode='edge')
+    n,h,w = lvl0.shape
     # create gaussian pyramid
+    lvl1 = np.zeros((n,h//2,w//2))
+    lvl2 = np.zeros((n,h//8,w//8))
+    lvl3 = np.zeros((n,h//32,w//32))
+    for i in range(n):
+        frame = lvl0[i,:,:]
+        frame = cv2.pyrDown(frame)
+        lvl1[i,:,:] = frame
+        frame = cv2.pyrDown(frame)
+        frame = cv2.pyrDown(frame)
+        lvl2[i,:,:] = frame
+        frame = cv2.pyrDown(frame)
+        frame = cv2.pyrDown(frame)
+        lvl3[i,:,:] = frame
     # align level1
     # align level2
     # align level3
