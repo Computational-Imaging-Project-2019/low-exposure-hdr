@@ -4,7 +4,11 @@ import subprocess
 import glob 
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+<<<<<<< Updated upstream
 import cv2
+=======
+import rawpy
+>>>>>>> Stashed changes
 
 
 def get_raw(input_dir, use_temp, verbose=True):
@@ -52,3 +56,17 @@ def get_raw(input_dir, use_temp, verbose=True):
         raw_imgs = np.load("./temp/raw_imgs.npy")
     return raw_imgs
 
+<<<<<<< Updated upstream
+=======
+def get_raw_object(input_dir):
+    raw_files = glob.glob(input_dir + "/*.dng")
+
+    rp_im = rawpy.imread(raw_files[0])
+
+    return rp_im
+
+
+
+
+
+>>>>>>> Stashed changes

@@ -39,12 +39,12 @@ if __name__ == "__main__":
 
     # STEP 1: ALIGN
     # select reference frame
-    Gb0 = raw_imgs[0,1::2,0::2];
-    Gb1 = raw_imgs[1,1::2,0::2];
-    Gb2 = raw_imgs[2,1::2,0::2];
-    Gr2 = raw_imgs[2,0::2,1::2];
-    Gr1 = raw_imgs[1,0::2,1::2];
-    Gr0 = raw_imgs[0,0::2,1::2];
+    Gb0 = raw_imgs[0, 1::2, 0::2]
+    Gb1 = raw_imgs[1, 1::2, 0::2]
+    Gb2 = raw_imgs[2, 1::2, 0::2]
+    Gr2 = raw_imgs[2, 0::2, 1::2]
+    Gr1 = raw_imgs[1, 0::2, 1::2]
+    Gr0 = raw_imgs[0, 0::2, 1::2]
     sharp = np.zeros((3,))
     sharp[0] = np.sum(cv2.Laplacian(Gr0,2)+cv2.Laplacian(Gb0,2))
     sharp[1] = np.sum(cv2.Laplacian(Gr1,2)+cv2.Laplacian(Gb1,2))
@@ -57,6 +57,9 @@ if __name__ == "__main__":
     # align level3
     # align level4
     
+    # get raw object to indentify image parameters
+    raw_obj = isp_helper.get_raw_object(args.input)
+
     end_time = time.time()
     print("Total time taken: {}".format(end_time - start_time))
 
