@@ -4,6 +4,7 @@ import subprocess
 import glob 
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import cv2
 
 
 def get_raw(input_dir, use_temp, verbose=True):
@@ -31,7 +32,7 @@ def get_raw(input_dir, use_temp, verbose=True):
             del dng_files[-1]
 
         # Run dcraw command to get tiffs
-        dcraw_command = "dcraw -4 -D -T {}"
+        dcraw_command = "./dcraw -4 -D -T {}"
         for dng_dir in tqdm(dng_files):
             os.system(dcraw_command.format(dng_dir))
     
@@ -50,8 +51,4 @@ def get_raw(input_dir, use_temp, verbose=True):
     else:
         raw_imgs = np.load("./temp/raw_imgs.npy")
     return raw_imgs
-
-
-
-
 

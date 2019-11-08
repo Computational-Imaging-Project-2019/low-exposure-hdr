@@ -4,6 +4,7 @@ import subprocess
 import argparse
 import isp_helper
 import time
+import cv2
 
 def get_args():
     parser = argparse.ArgumentParser(description="HDR+: Low exposure images to HDR")
@@ -36,7 +37,26 @@ if __name__ == "__main__":
     # Create the raw files
     raw_imgs = isp_helper.get_raw(args.input, args.temp, args.verbose)
 
-
+    # STEP 1: ALIGN
+    # select reference frame
+    Gb0 = raw_imgs[0,1::2,0::2];
+    Gb1 = raw_imgs[1,1::2,0::2];
+    Gb2 = raw_imgs[2,1::2,0::2];
+    Gr2 = raw_imgs[2,0::2,1::2];
+    Gr1 = raw_imgs[1,0::2,1::2];
+    Gr0 = raw_imgs[0,0::2,1::2];
+    sharp = np.zeros((3,))
+    sharp[0] = np.sum(cv2.Laplacian(Gr0,2)+cv2.Laplacian(Gb0,2))
+    sharp[1] = np.sum(cv2.Laplacian(Gr1,2)+cv2.Laplacian(Gb1,2))
+    sharp[2] = np.sum(cv2.Laplacian(Gr2,2)+cv2.Laplacian(Gb2,2))
+    ref_frame = np.argmax(sharp)
+    # average out Bayer BGGR values
+    # create gaussian pyramid
+    # align level1
+    # align level2
+    # align level3
+    # align level4
+    
     end_time = time.time()
     print("Total time taken: {}".format(end_time - start_time))
 
