@@ -53,11 +53,16 @@ def get_raw(input_dir, use_temp, verbose=True):
         raw_imgs = np.load("./temp/raw_imgs.npy")
     return raw_imgs
 
-def get_raw_object(input_dir):
+def get_raw_object(input_dir, ref_id=0):
+    """ input: input_dir (str) - Path to where the input files are present
+    output: rawpy_obj
+    
+    It returns the rawpy object which can be used to determine color matrix, white balance and other such parameter as needed"""
     raw_files = glob.glob(input_dir + "/*.dng")
+    raw_files.sort()
 
-    rp_im = rawpy.imread(raw_files[0])
-
+    # Use reference frame as the object
+    rp_im = rawpy.imread(raw_files[ref_id])
     return rp_im
 
 
