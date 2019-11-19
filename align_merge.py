@@ -169,6 +169,9 @@ def align_level_3(ref_id, img_lvls):
         # Keep shifts as (2, r, c)
         shifts = np.asarray(np.unravel_index(min_locs, (9, 9)))
 
+        # Make the shifts accurate as (4,4) corresponds to (0,0)
+        shifts = shifts - 4
+
         align_shifts.append(shifts)
     
     return np.stack(align_shifts)
