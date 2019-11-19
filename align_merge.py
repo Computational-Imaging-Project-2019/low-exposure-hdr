@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import cv2
 import rawpy
 import helper
+import skimage.util
 
 def get_GG_position(raw_pattern):
     """ input: raw_pattern (np.ndarray) - The raw pattern
@@ -53,6 +54,12 @@ def select_ref_frame(raw_imgs, raw_pattern):
 
 
 def create_scale_pyramid(raw_imgs):
+    """ 
+    input: raw_images
+    output: scale pyramid gaussian
+
+    Converts a stack of raw images to a set of gaussian pyramids of 4 levels, which are L0, L1 (2x Down), L2 (4x Down), L3 (4x Down)
+    """
     _, h, w = raw_imgs.shape
     h = h // 2
     w = w // 2
@@ -112,9 +119,12 @@ def align_level_3(ref_id, img_lvls):
 
     ref_tile = img_lvls[3][ref_id, ...] # gets the reference tile
 
-    # Find padding size to make it perfect 8x8 blocks
-    pad_rows = 8 - (L3_size[0] % 8)
-    pad_cols = 8 - (L3_size[1] % 8)
+        # Find padding size to make it perfect 16x16 blocks
+    if L3_size[0] % 8 != 0:
+        pad_rows = 8 - (L3_size[0] % 8)
+    
+    if L3_size[1] % 8 != 0:
+        pad_cols = 8 - (L3_size[1] % 8)
 
     # Pad to make the it perfect 8x8 blocks
     ref_tile = np.pad(ref_tile, ((0, pad_rows), (0, pad_cols)), 'edge')
@@ -139,7 +149,7 @@ def align_level_3(ref_id, img_lvls):
         # Find errors around 4x4 search radius
         for i in range(9):
             for j in range(9):
-                # SSD of the overlapping parts
+                # l2 norm of diff of the overlapping parts
                 err = (ref_tile[i : i + L3_size[0], j : j + L3_size[1]] - tile) ** 2
 
                 # Border cases: Zero out the beyond border errors?
@@ -176,26 +186,113 @@ def align_level_3(ref_id, img_lvls):
     
     return np.stack(align_shifts)
 
+def align_level_2(ref_id, img_lvls, L3_shifts):
+    num_tiles = len(img_lvls[2])
 
-        
+    L2_size = img_lvls[2][0, ...].shape
+
+    ref_tile = img_lvls[2][ref_id, ...] # gets the reference tile
+
+    # Find padding size to make it perfect 16x16 blocks
+    if L2_size[0] % 16 != 0:
+        pad_rows = 16 - (L2_size[0] % 16)
+    
+    if L2_size[1] % 16 != 0:
+        pad_cols = 16 - (L2_size[1] % 16)
+
+    # Pad to make the it perfect 8x8 blocks
+    ref_tile = np.pad(ref_tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+    L2_size = ref_tile.shape
+
+    # Scale the L3 shifts for L2 shifts (as it is a 4x Down)
+    L3_shifts = 4 * L3_shifts
+
+    # Repeat the motion vectors for each 16x16 block
+    L2_init_shifts = np.repeat(np.repeat(L3_shifts, 2, axis = -1), 2, axis = -2)
+    
+    if L2_init_shifts.shape[-1] != L2_size[-1]:
+        L2_init_shifts = L2_init_shifts[:, :, :, :-1]
+
+    if L2_init_shifts.shape[-2] != L2_size[-2]:
+        L2_init_shifts = L2_init_shifts[:, :, :-1, :]
+
+    # search: 4 pixel left/top shift, 4 pixel right/bottom shift (9x9 search radius)
+    ref_tile = np.pad(ref_tile, ((4, 4), (4, 4)), 'edge')
+
+    align_shifts = []
+
+    # Find alignment shift for each tile
+    for tile_id in range(num_tiles):
+        # Get the tile to be aligned
+        tile = img_lvls[2][tile_id, ...]
+
+        # Pad to make the it perfect 16x16 blocks
+        tile = np.pad(tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+
+        #  Convert the tile into blocks of 16x16
+        tile_blocks = skimage.util.view_as_blocks(tile, (16, 16))
+
+        # Create matrix for storing the shifts
+        tile_shift = np.zeros((tile_blocks.shape[0], tile_blocks.shape[1], 2))
+
+        # Find errors around 4x4 search radius
+        for row_idx in range(tile_blocks.shape[0]):
+            for col_idx in range(tile_blocks.shape[1]):
+
+                # Extract initial shifts
+                init_shift = L2_init_shifts[tile_id, :, row_idx, col_idx]
+
+                # Extract the tile_patch of 16x16
+                tile_patch = tile_blocks[row_idx, col_idx, :, :]
+
+                # Offsets for getting patch from ref_tile
+                row_offset = row_idx * 16
+                col_offset = col_idx * 16
+
+                err_patch = []
                 
+                # Search the 9x9 radius around the ref_patch after initial offset
+                for i in range(9):
+                    for j in range(9):
+                        # Extract the ref_patch
+                        ref_patch = ref_tile[row_offset + i + init_shift[0] : row_offset + i + init_shift[0] + 16, col_offset + j + init_shift[1]: col_offset + j + init_shift[1] + 16]
+
+                        # If patch is outside the ref_tile, it won't be 16x16, hence keep the error for it as inf
+                        # TODO: Is there somthing better that can be done?
+                        if ref_patch.shape != (16, 16):
+                            err_patch.append(np.inf)
+                            continue
+
+                        # l2 norm of diff of the overlapping parts
+                        err = ((ref_patch - tile_patch) ** 2).sum()
+
+                        err_patch.append(err)
                 
-        
-        
+                # Find minimum error location
+                err_patch = np.asarray(err_patch)
+                min_loc = np.argmin(err_patch)
+                shift = np.unravel_index(min_loc, (9, 9))
 
+                # Store the shifts for each tile
+                tile_shift[row_idx, col_idx, 0] = shift[0]
+                tile_shift[row_idx, col_idx, 1] = shift[1]
 
+        # Make the shifts accurate as (4,4) corresponds to (0,0)
+        tile_shift = tile_shift - 4
 
+        align_shifts.append(tile_shift)
+    
+    return np.stack(align_shifts)
 
 
 def align_images(ref_id, raw_imgs, use_temp=True):
 
     img_lvls = create_scale_pyramid(raw_imgs)
 
-
     # Align L3 (the smallest)
     L3_shifts = align_level_3(ref_id, img_lvls)
 
-    print(L3_shifts.shape)
-
+    # Align L2 using L3 shifts
+    L2_shifts = align_level_2(ref_id, img_lvls, L3_shifts)
 
     return 0
