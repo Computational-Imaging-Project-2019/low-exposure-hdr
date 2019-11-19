@@ -6,6 +6,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import cv2
 import rawpy
+import helper
 
 def get_GG_position(raw_pattern):
     """ input: raw_pattern (np.ndarray) - The raw pattern
@@ -66,7 +67,7 @@ def create_scale_pyramid(raw_imgs):
             raw_imgs[:, 0::2, 1::2]) / 4
 
     # Pad zeros if it is not a multiple of 32, future downsampling makes sure it is 0
-    lvl0 = np.pad(lvl0,((0, 0),(0, 32 - (h % 32)),(0,32 - (w % 32))), mode='edge')
+    lvl0 = np.pad(lvl0,((0, 0),(0, 32 - (h % 32)),(0, 32 - (w % 32))), mode='edge')
 
     img_lvls.append(lvl0)
 
@@ -81,15 +82,21 @@ def create_scale_pyramid(raw_imgs):
 
     # Create each level of pyramid 
     for i in range(num_tiles):
-        frame = lvl0[i,:,:]
+        frame = lvl0[i, :, :]
+
+        # L1
         frame = cv2.pyrDown(frame)
-        lvl1[i,:,:] = frame
+        lvl1[i, :, :] = frame
+
+        # L2
         frame = cv2.pyrDown(frame)
         frame = cv2.pyrDown(frame)
-        lvl2[i,:,:] = frame
+        lvl2[i, :, :] = frame
+
+        # L3
         frame = cv2.pyrDown(frame)
         frame = cv2.pyrDown(frame)
-        lvl3[i,:,:] = frame
+        lvl3[i, :, :] = frame
 
     # Appending other levels of the pyramids
     img_lvls.append(lvl1)
@@ -98,8 +105,94 @@ def create_scale_pyramid(raw_imgs):
 
     return img_lvls
 
-def align_images(ref_img, raw_imgs, use_temp=True):
+def align_level_3(ref_id, img_lvls):
+    num_tiles = len(img_lvls[3])
+
+    L3_size = img_lvls[3][0, ...].shape
+
+    ref_tile = img_lvls[3][ref_id, ...] # gets the reference tile
+
+    # Find padding size to make it perfect 8x8 blocks
+    pad_rows = 8 - (L3_size[0] % 8)
+    pad_cols = 8 - (L3_size[1] % 8)
+
+    # Pad to make the it perfect 8x8 blocks
+    ref_tile = np.pad(ref_tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+    L3_size = ref_tile.shape
+
+
+    # search: 4 pixel left/top shift, 4 pixel right/bottom shift (9x9 search radius)
+    ref_tile = np.pad(ref_tile, ((4, 4), (4, 4)), 'edge')
+
+    align_shifts = []
+
+    # Find alignment shift for each tile
+    for tile_id in range(num_tiles):
+        # Get the tile to be aligned
+        tile = img_lvls[3][tile_id, ...]
+
+        # Pad to make the it perfect 8x8 blocks
+        tile = np.pad(tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+
+        err_stack = []
+
+        # Find errors around 4x4 search radius
+        for i in range(9):
+            for j in range(9):
+                # SSD of the overlapping parts
+                err = (ref_tile[i : i + L3_size[0], j : j + L3_size[1]] - tile) ** 2
+
+                # Border cases: Zero out the beyond border errors?
+                # if i < 4:
+                #     err[:i, :] = 0
+
+                # if j < 4:
+                #     err[:, :j] = 0
+
+                # if i > 4:
+                #     err[i + L3_size[0]:, :] = 0
+
+                # if j > 4:
+                #     err[:, j + + L3_size[1]:] = 0
+
+                # Take sum of all l2 norm errors for each 8x8 block
+                err = err.reshape(L3_size[0] // 8, 8, L3_size[1] // 8, 8).sum(axis=(1, 3))
+
+                err_stack.append(err)
+
+        # stack as numpy array
+        err_stack = np.stack(err_stack)
+
+        # Find the minimum error locations
+        min_locs = np.argmin(err_stack, axis=0)
+
+        # Keep shifts as (2, r, c)
+        shifts = np.asarray(np.unravel_index(min_locs, (9, 9)))
+
+        align_shifts.append(shifts)
+    
+    return np.stack(align_shifts)
+
+
+        
+                
+                
+        
+        
+
+
+
+
+
+def align_images(ref_id, raw_imgs, use_temp=True):
 
     img_lvls = create_scale_pyramid(raw_imgs)
+
+
+    # Align L3 (the smallest)
+    L3_shifts = align_level_3(ref_id, img_lvls)
+
+    print(L3_shifts.shape)
+
 
     return 0

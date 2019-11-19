@@ -46,9 +46,11 @@ if __name__ == "__main__":
     # select reference frame
     ref_frame_id = align_merge.select_ref_frame(raw_imgs, raw_obj.raw_pattern)
 
+    print("Reference frame: Frame {}".format(ref_frame_id))
+
     # average out Bayer BGGR values
     raw_imgs = raw_imgs.astype('double')
-    aligned_raw = align_merge.align_images(raw_imgs[ref_frame_id, ...], raw_imgs)
+    aligned_raw = align_merge.align_images(ref_frame_id, raw_imgs)
 
     end_time = time.time()
     print("Total time taken: {}".format(end_time - start_time))
