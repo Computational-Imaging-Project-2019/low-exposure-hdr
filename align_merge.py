@@ -52,7 +52,6 @@ def select_ref_frame(raw_imgs, raw_pattern):
 
     return ref_frame_id
 
-
 def create_scale_pyramid(raw_imgs):
     """ 
     input: raw_images
@@ -210,11 +209,11 @@ def align_level_2(ref_id, img_lvls, L3_shifts):
     # Repeat the motion vectors for each 16x16 block
     L2_init_shifts = np.repeat(np.repeat(L3_shifts, 2, axis = -1), 2, axis = -2)
     
-    if L2_init_shifts.shape[-1] != L2_size[-1]:
-        L2_init_shifts = L2_init_shifts[:, :, :, :L2_size[-1] - L2_init_shifts.shape[-1]]
+    if L2_init_shifts.shape[-1] != (L2_size[-1] // 16):
+        L2_init_shifts = L2_init_shifts[:, :, :, :(L2_size[-1] // 16)]
 
-    if L2_init_shifts.shape[-2] != L2_size[-2]:
-        L2_init_shifts = L2_init_shifts[:, :, :L2_size[-2] - L2_init_shifts.shape[-2], :]
+    if L2_init_shifts.shape[-2] != (L2_size[-2] // 16):
+        L2_init_shifts = L2_init_shifts[:, :, :(L2_size[-2] // 16), :]
 
     # search: 4 pixel left/top shift, 4 pixel right/bottom shift (9x9 search radius)
     ref_tile = np.pad(ref_tile, ((4, 4), (4, 4)), 'edge')
@@ -308,12 +307,12 @@ def align_level_1(ref_id, img_lvls, L2_shifts):
 
     # Repeat the motion vectors for each 16x16 block
     L1_init_shifts = np.repeat(np.repeat(L2_shifts, 4, axis = 1), 4, axis = 2)
-    
-    if L1_init_shifts.shape[1] != L1_size[0]:
-        L1_init_shifts = L1_init_shifts[:, :L1_size[0] - L1_init_shifts.shape[1], :, :]
 
-    if L1_init_shifts.shape[2] != L1_size[1]:
-        L1_init_shifts = L1_init_shifts[:, :, :L1_size[1] - L1_init_shifts.shape[2], :]
+    if L1_init_shifts.shape[1] != (L1_size[0] // 16):
+        L1_init_shifts = L1_init_shifts[:, :(L1_size[0] // 16), :, :]
+
+    if L1_init_shifts.shape[2] != (L1_size[1] / 16):
+        L1_init_shifts = L1_init_shifts[:, :, :(L1_size[1] // 16), :]
 
     # search: 4 pixel left/top shift, 4 pixel right/bottom shift (9x9 search radius)
     ref_tile = np.pad(ref_tile, ((4, 4), (4, 4)), 'edge')
@@ -383,21 +382,134 @@ def align_level_1(ref_id, img_lvls, L2_shifts):
     
     return np.stack(align_shifts)
 
+def align_level_0(ref_id, img_lvls, L1_shifts):
+    num_tiles = len(img_lvls[0])
+
+    L0_size = img_lvls[0][0, ...].shape
+
+    ref_tile = img_lvls[0][ref_id, ...] # gets the reference tile
+
+    # Find padding size to make it perfect 16x16 blocks
+    pad_rows, pad_cols = 0, 0
+    if L0_size[0] % 16 != 0:
+        pad_rows = 16 - (L0_size[0] % 16)
+    
+    if L0_size[1] % 16 != 0:
+        pad_cols = 16 - (L0_size[1] % 16)
+
+    # Pad to make the it perfect 16x16 blocks
+    ref_tile = np.pad(ref_tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+    L0_size = ref_tile.shape
+
+    # Scale the L1 shifts for L0 shifts (as it is a 2x Down)
+    L1_shifts = 2 * L1_shifts
+
+    # Repeat the motion vectors for each 16x16 block
+    L0_init_shifts = np.repeat(np.repeat(L1_shifts, 2, axis = 1), 2, axis = 2)
+    
+    if L0_init_shifts.shape[1] != (L0_size[0] // 16):
+        L0_init_shifts = L0_init_shifts[:, :(L0_size[0] // 16), :, :]
+
+    if L0_init_shifts.shape[2] != (L0_size[1] / 16):
+        L0_init_shifts = L0_init_shifts[:, :, :(L0_size[1] // 16), :]
+
+    # search: 1 pixel left/top shift, 1 pixel right/bottom shift (3x3 search radius)
+    ref_tile = np.pad(ref_tile, ((1, 1), (1, 1)), 'edge')
+
+    align_shifts = []
+
+    # Find alignment shift for each tile
+    for tile_id in range(num_tiles):
+        # Get the tile to be aligned
+        tile = img_lvls[0][tile_id, ...]
+
+        # Pad to make the it perfect 16x16 blocks
+        tile = np.pad(tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+
+        #  Convert the tile into blocks of 16x16
+        tile_blocks = skimage.util.view_as_blocks(tile, (16, 16))
+
+        # Create matrix for storing the shifts
+        tile_shift = np.zeros((tile_blocks.shape[0], tile_blocks.shape[1], 2))
+
+        # Find errors around 4x4 search radius
+        for row_idx in range(tile_blocks.shape[0]):
+            for col_idx in range(tile_blocks.shape[1]):
+
+                # Extract initial shifts, make it int
+                init_shift = L0_init_shifts[tile_id, row_idx, col_idx, :].astype(int)
+
+                # Extract the tile_patch of 16x16
+                tile_patch = tile_blocks[row_idx, col_idx, :, :]
+
+                # Offsets for getting patch from ref_tile
+                row_offset = row_idx * 16
+                col_offset = col_idx * 16
+
+                err_patch = []
+                
+                # Search the 3x3 radius around the ref_patch after initial offset
+                for i in range(3):
+                    for j in range(3):
+                        # Extract the ref_patch
+                        ref_patch = ref_tile[row_offset + i + init_shift[0] : row_offset + i + init_shift[0] + 16, col_offset + j + init_shift[1]: col_offset + j + init_shift[1] + 16]
+
+                        # If patch is outside the ref_tile, it won't be 16x16, hence keep the error for it as inf
+                        # TODO: Is there somthing better that can be done?
+                        if ref_patch.shape != (16, 16):
+                            err_patch.append(np.inf)
+                            continue
+
+                        # l2 norm of diff of the overlapping parts
+                        err = (abs(ref_patch - tile_patch)).sum()
+
+                        err_patch.append(err)
+                
+                # Find minimum error location
+                err_patch = np.asarray(err_patch)
+                min_loc = np.argmin(err_patch)
+                shift = np.unravel_index(min_loc, (3, 3))
+
+                # Store the shifts for each tile
+                tile_shift[row_idx, col_idx, 0] = shift[0]
+                tile_shift[row_idx, col_idx, 1] = shift[1]
+
+        # Make the shifts accurate as (4,4) corresponds to (0,0)
+        tile_shift = tile_shift - 1
+
+        align_shifts.append(tile_shift)
+    
+    return np.stack(align_shifts)
+
 
 def align_images(ref_id, raw_imgs, use_temp=True):
 
-    img_lvls = create_scale_pyramid(raw_imgs)
+    temp_exists = os.path.isfile("./temp/L0_shifts.npy")
 
-    # Align L3 (the smallest)
-    print("Aligning L3 ...")
-    L3_shifts = align_level_3(ref_id, img_lvls)
+    if (temp_exists == False) or (use_temp == False):
+        # Create Gaussian scale pyramid
+        img_lvls = create_scale_pyramid(raw_imgs)
 
-    # Align L2 using L3 shifts
-    print("Aligning L2 ...")
-    L2_shifts = align_level_2(ref_id, img_lvls, L3_shifts)
+        # Align L3 (the smallest)
+        print("Aligning L3 ...")
+        L3_shifts = align_level_3(ref_id, img_lvls)
 
-    # Align L1 using L2 shifts
-    print("Aligning L1 ...")
-    L1_shifts = align_level_1(ref_id, img_lvls, L2_shifts)
+        # Align L2 using L3 shifts
+        print("Aligning L2 ...")
+        L2_shifts = align_level_2(ref_id, img_lvls, L3_shifts)
 
-    return 0
+        # Align L1 using L2 shifts
+        print("Aligning L1 ...")
+        L1_shifts = align_level_1(ref_id, img_lvls, L2_shifts)
+
+        # Align L0 using L1 shifts
+        print("Aligning L0 ...")
+        L0_shifts = align_level_0(ref_id, img_lvls, L1_shifts)
+
+        # Save the L0 shifts
+        np.save("./temp/L0_shifts.npy", L0_shifts)
+    else:
+        # Load the L0 shifts and return it
+        L0_shifts = np.load("./temp/L0_shifts.npy")
+
+    return L0_shifts
