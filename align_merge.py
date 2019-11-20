@@ -273,8 +273,8 @@ def align_level_2(ref_id, img_lvls, L3_shifts):
                 shift = np.unravel_index(min_loc, (9, 9))
 
                 # Store the shifts for each tile
-                tile_shift[row_idx, col_idx, 0] = shift[0]
-                tile_shift[row_idx, col_idx, 1] = shift[1]
+                tile_shift[row_idx, col_idx, 0] = init_shift[0] + shift[0]
+                tile_shift[row_idx, col_idx, 1] = init_shift[1] + shift[1]
 
         # Make the shifts accurate as (4,4) corresponds to (0,0)
         tile_shift = tile_shift - 4
@@ -372,8 +372,8 @@ def align_level_1(ref_id, img_lvls, L2_shifts):
                 shift = np.unravel_index(min_loc, (9, 9))
 
                 # Store the shifts for each tile
-                tile_shift[row_idx, col_idx, 0] = shift[0]
-                tile_shift[row_idx, col_idx, 1] = shift[1]
+                tile_shift[row_idx, col_idx, 0] = init_shift[0] + shift[0]
+                tile_shift[row_idx, col_idx, 1] = init_shift[1] + shift[1]
 
         # Make the shifts accurate as (4,4) corresponds to (0,0)
         tile_shift = tile_shift - 4
@@ -471,8 +471,8 @@ def align_level_0(ref_id, img_lvls, L1_shifts):
                 shift = np.unravel_index(min_loc, (3, 3))
 
                 # Store the shifts for each tile
-                tile_shift[row_idx, col_idx, 0] = shift[0]
-                tile_shift[row_idx, col_idx, 1] = shift[1]
+                tile_shift[row_idx, col_idx, 0] = init_shift[0] + shift[0]
+                tile_shift[row_idx, col_idx, 1] = init_shift[1] + shift[1]
 
         # Make the shifts accurate as (4,4) corresponds to (0,0)
         tile_shift = tile_shift - 1
@@ -485,7 +485,7 @@ def align_level_0(ref_id, img_lvls, L1_shifts):
 def align_images(ref_id, raw_imgs, use_temp=True):
 
     temp_exists = os.path.isfile("./temp/L0_shifts.npy")
-
+    
     if (temp_exists == False) or (use_temp == False):
         # Create Gaussian scale pyramid
         img_lvls = create_scale_pyramid(raw_imgs)
@@ -506,9 +506,13 @@ def align_images(ref_id, raw_imgs, use_temp=True):
         print("Aligning L0 ...")
         L0_shifts = align_level_0(ref_id, img_lvls, L1_shifts)
 
+        # Note: L0_shifts now refer to shifts for every 32x32 block of the padded raw_img frames
+
         # Save the L0 shifts
         np.save("./temp/L0_shifts.npy", L0_shifts)
     else:
+        print("Temp shifts present...")
+
         # Load the L0 shifts and return it
         L0_shifts = np.load("./temp/L0_shifts.npy")
 
