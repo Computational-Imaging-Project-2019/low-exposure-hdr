@@ -50,7 +50,12 @@ if __name__ == "__main__":
 
     # average out Bayer BGGR values
     raw_imgs = raw_imgs.astype('double')
-    aligned_raw = align_merge.align_images(ref_frame_id, raw_imgs)
+
+    # Find the shifts required for each 32x32 block in the mosaic raw img
+    # Or every 16x16 block for demosaiced image
+    raw_shifts = align_merge.align_images(ref_frame_id, raw_imgs)
+
+    merged_raw = align_merge.merge_raws(raw_imgs, ref_frame_id, raw_shifts, raw_obj.raw_pattern)
 
     end_time = time.time()
     print("Total time taken: {}".format(end_time - start_time))

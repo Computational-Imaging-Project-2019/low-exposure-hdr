@@ -9,17 +9,24 @@ import rawpy
 import helper
 import skimage.util
 
-def get_GG_position(raw_pattern):
-    """ input: raw_pattern (np.ndarray) - The raw pattern
-    output: Gr_pos, Gb_pos - Green channel positions"""
-    
+def get_RGB_position(raw_pattern):
+    """ 
+    input: raw_pattern (np.ndarray) - The raw pattern
+    output: R, Gr_pos, B, Gb_pos - Green channel positions
+    """
+
     assert(raw_pattern.shape == (2,2))
 
-    Gr, Gb  = 1, 3
-
+    # Positions in the numpy file
+    R, Gr, B, Gb  = 0, 1, 2, 3
+    
+    # Get the positinos from the raw_pattern
+    R_pos = np.squeeze(np.argwhere(raw_pattern == R))
     Gr_pos = np.squeeze(np.argwhere(raw_pattern == Gr))
+    B_pos = np.squeeze(np.argwhere(raw_pattern == B))
     Gb_pos = np.squeeze(np.argwhere(raw_pattern == Gb))
-    return Gr_pos, Gb_pos
+
+    return R_pos, Gr_pos, B_pos, Gb_pos
 
 def select_ref_frame(raw_imgs, raw_pattern):
     """ Input: raw_imgs (np.ndarray) - Raw images list
@@ -31,7 +38,7 @@ def select_ref_frame(raw_imgs, raw_pattern):
     assert(raw_pattern.shape == (2,2))
     assert(raw_imgs.shape[0] >= 3)
 
-    Gr, Gb = get_GG_position(raw_pattern)
+    _, Gr, _, Gb = get_RGB_position(raw_pattern)
 
     Gr0 = raw_imgs[0, Gr[0]::2, Gr[1]::2]
     Gb0 = raw_imgs[0, Gb[0]::2, Gb[0]::2]
@@ -481,11 +488,112 @@ def align_level_0(ref_id, img_lvls, L1_shifts):
     
     return np.stack(align_shifts)
 
+def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
+
+    R, Gr, B, Gb = get_RGB_position(raw_pattern)
+    num_tiles = raw_imgs.shape[0]
+
+    frame_size = raw_imgs[0, ...].shape
+
+    ref_frame = raw_imgs[ref_id, ...]
+
+    # Find padding size to make it perfect 32x32 blocks
+    pad_rows, pad_cols = 0, 0
+    if frame_size[0] % 32 != 0:
+        pad_rows = 32 - (frame_size[0] % 32)
+    
+    if frame_size[1] % 32 != 0:
+        pad_cols = 32 - (frame_size[1] % 32)
+
+    # Pad to make the it perfect 16x16 blocks
+    ref_frame = np.pad(ref_frame, ((0, pad_rows), (0, pad_cols)), 'edge')
+
+    # Separate the color planes for merging 
+    R_ref_frame = ref_frame[R[0]::2, R[1]::2]
+    Gr_ref_frame = ref_frame[Gr[0]::2, Gr[1]::2]
+    B_ref_frame = ref_frame[B[0]::2, B[1]::2]
+    Gb_ref_frame = ref_frame[Gb[0]::2, Gb[0]::2]
+
+    merge_pixel_map = np.zeros_like(ref_frame)
+
+    merged_raw = np.zeros_like(ref_frame)
+
+    # merge_R_pixel_map = np.zeros_like(R_ref_frame)
+    # merge_Gr_pixel_map = np.zeros_like(Gr_ref_frame)
+    # merge_B_pixel_map = np.zeros_like(B_ref_frame)
+    # merge_Gb_pixel_map = np.zeros_like(Gb_ref_frame)
+
+    # merge_R_frame = np.zeros_like(R_ref_frame)
+    # merge_Gr_frame = np.zeros_like(Gr_ref_frame)
+    # merge_B_frame = np.zeros_like(B_ref_frame)
+    # merge_Gb_frame = np.zeros_like(Gb_ref_frame)
+
+    for tile_id in range(num_tiles):
+
+        # Extract the needed tile
+        tile = raw_imgs[tile_id, ...]
+
+        # Pad to make the it perfect 16x16 blocks
+        tile = np.pad(tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+
+        #  Convert the tile into blocks of 16x16
+        tile_blocks = skimage.util.view_as_blocks(tile, (32, 32))
+
+        # Merge each block
+        for row_idx in range(tile_blocks.shape[0]):
+            for col_idx in range(tile_blocks.shape[1]):
+                # Extract shifts for given block
+                shift = L0_shifts[tile_id, row_idx, col_idx, :].astype(int)
+
+                # Extract tile patch
+                tile_patch = tile_blocks[row_idx, col_idx, :, :]
+
+                # Offsets for getting patch from ref_tile
+                row_offset = row_idx * 32
+                col_offset = col_idx * 32
+
+                merge_block = merged_raw[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32]
+
+                if merge_block.shape == (32,32):
+                    merged_raw[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = merged_raw[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] + tile_patch
+
+                    merge_pixel_map[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = merge_pixel_map[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] + 1
+
+
+    
+    merged_raw = merged_raw / merge_pixel_map
+    
+    R_frame = merged_raw[R[0]::2, R[1]::2]
+    Gr_frame = merged_raw[Gr[0]::2, Gr[1]::2]
+    B_frame = merged_raw[B[0]::2, B[1]::2]
+    Gb_frame = merged_raw[Gb[0]::2, Gb[0]::2]
+
+    G_frame = (Gr_frame + Gb_frame) / 2
+
+    max_r = np.max(R_frame)
+    max_g = np.max(G_frame)
+    max_b = np.max(B_frame)
+
+    R_frame = R_frame * max_g / max_r
+    B_frame = R_frame * max_g / max_b
+    G_frame = G_frame
+
+
+    img = np.dstack((B_frame, G_frame, R_frame))
+
+    print(img.shape)
+    img = img / np.max(img)
+    plt.imshow(img * 3)
+    plt.show()
+
+
+    return 0
+
 
 def align_images(ref_id, raw_imgs, use_temp=True):
 
     temp_exists = os.path.isfile("./temp/L0_shifts.npy")
-    
+
     if (temp_exists == False) or (use_temp == False):
         # Create Gaussian scale pyramid
         img_lvls = create_scale_pyramid(raw_imgs)
