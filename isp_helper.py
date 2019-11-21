@@ -9,13 +9,14 @@ import rawpy
 
 
 def get_raw(input_dir, use_temp, verbose=True):
-    """Input: (str) input_dir
+    """
+    Input: (str) input_dir
     Output: (np.ndarray) raw_imgs
 
     Finds all the dng files in the given directory and converts them to a stack of raw images after using dcraw internally.
 
-    Note: This functions needs dcraw to be installed in your system."""
-
+    Note: This functions needs dcraw to be installed in your system.
+    """
     if verbose:
         print("Loading Raw images...")
     raw_exists = os.path.isfile("./temp/raw_imgs.npy")
@@ -54,10 +55,12 @@ def get_raw(input_dir, use_temp, verbose=True):
     return raw_imgs
 
 def get_raw_object(input_dir, ref_id=0):
-    """ input: input_dir (str) - Path to where the input files are present
-    output: rawpy_obj
+    """ 
+    Input: input_dir (str) - Path to where the input files are present
+    Output: rawpy_obj
     
-    It returns the rawpy object which can be used to determine color matrix, white balance and other such parameter as needed"""
+    It returns the rawpy object which can be used to determine color matrix, white balance and other such parameter as needed
+    """
     raw_files = glob.glob(input_dir + "/*.dng")
     raw_files.sort()
 

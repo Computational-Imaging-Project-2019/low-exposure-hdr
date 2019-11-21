@@ -6,14 +6,24 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import cv2
 import rawpy
-import helper
+#import helper
 import skimage.util
 
+<<<<<<< HEAD
 def get_RGB_position(raw_pattern):
     """ 
     input: raw_pattern (np.ndarray) - The raw pattern
     output: R, Gr_pos, B, Gb_pos - Green channel positions
     """
+=======
+def get_GG_position(raw_pattern):
+    """ 
+    Input: raw_pattern (np.ndarray) - The raw pattern
+    Output: Gr_pos, Gb_pos - Green channel positions
+    """
+    
+    assert(raw_pattern.shape == (2,2))
+>>>>>>> Merging code written v1
 
     assert(raw_pattern.shape == (2,2))
 
@@ -29,11 +39,13 @@ def get_RGB_position(raw_pattern):
     return R_pos, Gr_pos, B_pos, Gb_pos
 
 def select_ref_frame(raw_imgs, raw_pattern):
-    """ Input: raw_imgs (np.ndarray) - Raw images list
-        Output: index (int) - integer index to the raw images list
+    """ 
+    Input: raw_imgs (np.ndarray) - Raw images list
+    Output: index (int) - integer index to the raw images list
         
-        This function returns the selected reference frame index 
-        after selecting it using a laplacian measure of  sharpness"""
+    This function returns the selected reference frame index 
+    after selecting it using a laplacian measure of  sharpness
+    """
 
     assert(raw_pattern.shape == (2,2))
     assert(raw_imgs.shape[0] >= 3)
@@ -61,8 +73,8 @@ def select_ref_frame(raw_imgs, raw_pattern):
 
 def create_scale_pyramid(raw_imgs):
     """ 
-    input: raw_images
-    output: scale pyramid gaussian
+    Input: raw_images
+    Output: scale pyramid gaussian
 
     Converts a stack of raw images to a set of gaussian pyramids of 4 levels, which are L0, L1 (2x Down), L2 (4x Down), L3 (4x Down)
     """
@@ -268,7 +280,7 @@ def align_level_2(ref_id, img_lvls, L3_shifts):
                         ref_patch = ref_tile[row_offset + i + init_shift[0] : row_offset + i + init_shift[0] + 16, col_offset + j + init_shift[1]: col_offset + j + init_shift[1] + 16]
 
                         # If patch is outside the ref_tile, it won't be 16x16, hence keep the error for it as inf
-                        # TODO: Is there somthing better that can be done?
+                        # TODO: Is there something better that can be done?
                         if ref_patch.shape != (16, 16):
                             err_patch.append(np.inf)
                             continue
@@ -485,7 +497,7 @@ def align_level_0(ref_id, img_lvls, L1_shifts):
                 tile_shift[row_idx, col_idx, 0] = init_shift[0] + shift[0]
                 tile_shift[row_idx, col_idx, 1] = init_shift[1] + shift[1]
 
-        # Make the shifts accurate as (4,4) corresponds to (0,0)
+        # Make the shifts accurate as (1,1) corresponds to (0,0)
         tile_shift = tile_shift - 1
 
         align_shifts.append(tile_shift)
@@ -635,3 +647,52 @@ def align_images(ref_id, raw_imgs, use_temp=True):
         L0_shifts = np.load("./temp/L0_shifts.npy")
 
     return L0_shifts
+
+def merge_frames(aligned_frames,ref_frame):
+    """
+    Inputs:
+        aligned_frames: (np.ndarray) All the alternatives frames aligned and processed
+        ref_frame: (np.ndarray) Reference frame
+    Outputs:
+        merged: (np.ndarray) Merged output by merging overlapping weighted windows in Fourier domain
+    """
+    
+    # aligned_frames has shape N x C x H x W
+    N,C,H,W = aligned_frames.shape
+    # ref_frame has shape C x H x W
+    assert(C==ref_frame.shape[0])
+    assert(H==ref_frame.shape[1])
+    assert(W==ref_frame.shape[2])
+    
+    rcwin = np.zeros((16,16))
+    x = np.linspace(0,16,16,endpoint=False)
+    rcwin = (1/2) - (1/2)*np.cos(2*np.pi*(x+0.5)/16)
+    
+    merged = np.zeros((H,W,C))
+    for channel_id in range(C):
+        tile_blocks = skimage.util.shape.view_as_windows(np.reshape(ref_frame[channel_id,:,:],(H,W)), (16, 16),step=8)
+        h,w,_,_ = tile_blocks.shape
+        frame_tile_blocks = []
+        for frame_id in range(N):
+            frame = np.reshape(aligned_frames[frame_id,channel_id,:,:],(H,W))
+            frame_tile_blocks.append(skimage.util.shape.view_as_windows(frame,(16,16),step=8))
+        for i in range(h):
+            for j in range(w):
+                tile = np.multiply(tile_blocks(i,j,:,:),rcwin);
+                T0 = np.fft.fft2(tile)
+                T0clean = T0
+                for frame_id in range(N):
+                    frame = frame_tile_blocks[frame_id]
+                    frame = frame[i,j,:,:].reshape(16,16)
+                    Ti = (np.fft.fft2(frame))
+                    D = np.abs(T0-Ti)
+                    k = 0.001
+                    Ai = D/(D+k)
+                    T0clean = T0clean + (((1-Ai)*Ti)+(Ai*T0))
+                T0clean = T0clean/N;
+                Imerge = np.real(np.fft.ifft2(T0clean))
+                merged[channel_id,i*8:8*i+16,j*8:8*j+16] = merged[channel_id,i*8:8*i+16,j*8:8*j+16] + Imerge
+    
+    return merged
+                    
+    
