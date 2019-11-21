@@ -125,7 +125,9 @@ def align_level_3(ref_id, img_lvls):
 
     ref_tile = img_lvls[3][ref_id, ...] # gets the reference tile
 
-        # Find padding size to make it perfect 16x16 blocks
+    # Find padding size to make it perfect 16x16 blocks
+    pad_rows = 0
+    pad_cols = 0
     if L3_size[0] % 8 != 0:
         pad_rows = 8 - (L3_size[0] % 8)
     
@@ -200,6 +202,8 @@ def align_level_2(ref_id, img_lvls, L3_shifts):
     ref_tile = img_lvls[2][ref_id, ...] # gets the reference tile
 
     # Find padding size to make it perfect 16x16 blocks
+    pad_rows = 0
+    pad_cols = 0
     if L2_size[0] % 16 != 0:
         pad_rows = 16 - (L2_size[0] % 16)
     
@@ -583,8 +587,13 @@ def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
 
     print(img.shape)
     img = img / np.max(img)
-    plt.imshow(img * 3)
-    plt.show()
+    # plt.imshow(img * 3)
+    # plt.show()
+
+    cv2.imshow("temp", img*4)
+    cv2.waitKey(0)
+
+    cv2.imwrite("t.png", (img * 255).astype(int) * 4)
 
 
     return 0
@@ -593,14 +602,15 @@ def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
 def align_images(ref_id, raw_imgs, use_temp=True):
 
     temp_exists = os.path.isfile("./temp/L0_shifts.npy")
-
-    if (temp_exists == False) or (use_temp == False):
+    use_temp = 0
+    if (use_temp == 0):
         # Create Gaussian scale pyramid
         img_lvls = create_scale_pyramid(raw_imgs)
 
         # Align L3 (the smallest)
         print("Aligning L3 ...")
         L3_shifts = align_level_3(ref_id, img_lvls)
+        print(L3_shifts[4])
 
         # Align L2 using L3 shifts
         print("Aligning L2 ...")

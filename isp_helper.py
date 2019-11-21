@@ -20,7 +20,7 @@ def get_raw(input_dir, use_temp, verbose=True):
         print("Loading Raw images...")
     raw_exists = os.path.isfile("./temp/raw_imgs.npy")
 
-    if (raw_exists == False) or (use_temp == False):
+    if (use_temp == 0):
         # Find all the .dng files
         dng_files = glob.glob(input_dir + "/*.dng")
         dng_files.sort()
@@ -33,7 +33,7 @@ def get_raw(input_dir, use_temp, verbose=True):
             del dng_files[-1]
 
         # Run dcraw command to get tiffs
-        dcraw_command = "./dcraw -4 -D -T {}"
+        dcraw_command = "dcraw -4 -D -T {}"
         for dng_dir in tqdm(dng_files):
             os.system(dcraw_command.format(dng_dir))
     
