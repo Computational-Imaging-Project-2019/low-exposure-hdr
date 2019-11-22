@@ -55,6 +55,7 @@ if __name__ == "__main__":
     # Or every 16x16 block for demosaiced image
     raw_shifts = align_merge.align_images(ref_frame_id, raw_imgs)
 
+    print("Merging frames ...")
     merged_raw = align_merge.merge_raws(raw_imgs, ref_frame_id, raw_shifts, raw_obj.raw_pattern)
 
     end_time = time.time()

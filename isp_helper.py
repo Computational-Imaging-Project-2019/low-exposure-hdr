@@ -19,7 +19,14 @@ def get_raw(input_dir, use_temp, verbose=True):
     """
     if verbose:
         print("Loading Raw images...")
-    raw_exists = os.path.isfile("./temp/raw_imgs.npy")
+    
+
+    if (use_temp == 1):
+        raw_exists = os.path.isfile("./temp/raw_imgs.npy")
+        if raw_exists:
+            raw_imgs = np.load("./temp/raw_imgs.npy")
+        else:
+            use_temp = 0
 
     if (use_temp == 0):
         # Find all the .dng files
@@ -50,8 +57,7 @@ def get_raw(input_dir, use_temp, verbose=True):
 
         raw_imgs = np.stack(raw_imgs)
         np.save("./temp/raw_imgs.npy", raw_imgs)
-    else:
-        raw_imgs = np.load("./temp/raw_imgs.npy")
+        
     return raw_imgs
 
 def get_raw_object(input_dir, ref_id=0):

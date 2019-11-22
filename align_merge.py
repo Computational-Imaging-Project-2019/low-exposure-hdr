@@ -9,21 +9,11 @@ import rawpy
 #import helper
 import skimage.util
 
-<<<<<<< HEAD
 def get_RGB_position(raw_pattern):
     """ 
     input: raw_pattern (np.ndarray) - The raw pattern
     output: R, Gr_pos, B, Gb_pos - Green channel positions
     """
-=======
-def get_GG_position(raw_pattern):
-    """ 
-    Input: raw_pattern (np.ndarray) - The raw pattern
-    Output: Gr_pos, Gb_pos - Green channel positions
-    """
-    
-    assert(raw_pattern.shape == (2,2))
->>>>>>> Merging code written v1
 
     assert(raw_pattern.shape == (2,2))
 
@@ -504,14 +494,18 @@ def align_level_0(ref_id, img_lvls, L1_shifts):
     
     return np.stack(align_shifts)
 
-def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
-
+def create_aligned_frames(raw_imgs, ref_id, shifts_16x16, raw_pattern):
+    print("Aligning frames ...")
     R, Gr, B, Gb = get_RGB_position(raw_pattern)
-    num_tiles = raw_imgs.shape[0]
 
+    # Find the number of frames
+    num_frames = raw_imgs.shape[0]
+
+    # Frame size extraction
     frame_size = raw_imgs[0, ...].shape
 
-    ref_frame = raw_imgs[ref_id, ...]
+    # Create shifts fpr 32x32 blocks instead of 16x16 
+    shifts_32x32 = np.repeat(np.repeat(shifts_16x16, 2, axis = 1), 2, axis = 2)
 
     # Find padding size to make it perfect 32x32 blocks
     pad_rows, pad_cols = 0, 0
@@ -521,100 +515,105 @@ def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
     if frame_size[1] % 32 != 0:
         pad_cols = 32 - (frame_size[1] % 32)
 
-    # Pad to make the it perfect 16x16 blocks
-    ref_frame = np.pad(ref_frame, ((0, pad_rows), (0, pad_cols)), 'edge')
+    aligned_color_frames = []
 
-    # Separate the color planes for merging 
-    R_ref_frame = ref_frame[R[0]::2, R[1]::2]
-    Gr_ref_frame = ref_frame[Gr[0]::2, Gr[1]::2]
-    B_ref_frame = ref_frame[B[0]::2, B[1]::2]
-    Gb_ref_frame = ref_frame[Gb[0]::2, Gb[0]::2]
+    for frame_id in range(num_frames):
+        if ref_id == frame_id:
+            continue
 
-    merge_pixel_map = np.zeros_like(ref_frame)
-
-    merged_raw = np.zeros_like(ref_frame)
-
-    # merge_R_pixel_map = np.zeros_like(R_ref_frame)
-    # merge_Gr_pixel_map = np.zeros_like(Gr_ref_frame)
-    # merge_B_pixel_map = np.zeros_like(B_ref_frame)
-    # merge_Gb_pixel_map = np.zeros_like(Gb_ref_frame)
-
-    # merge_R_frame = np.zeros_like(R_ref_frame)
-    # merge_Gr_frame = np.zeros_like(Gr_ref_frame)
-    # merge_B_frame = np.zeros_like(B_ref_frame)
-    # merge_Gb_frame = np.zeros_like(Gb_ref_frame)
-
-    for tile_id in range(num_tiles):
-
-        # Extract the needed tile
-        tile = raw_imgs[tile_id, ...]
+        # Extract the needed frame
+        frame = raw_imgs[frame_id, ...]
 
         # Pad to make the it perfect 16x16 blocks
-        tile = np.pad(tile, ((0, pad_rows), (0, pad_cols)), 'edge')
+        frame = np.pad(frame, ((0, pad_rows), (0, pad_cols)), 'edge')
 
-        #  Convert the tile into blocks of 16x16
-        tile_blocks = skimage.util.view_as_blocks(tile, (32, 32))
+        #  Convert the frame into blocks of 32x32
+        tile_blocks = skimage.util.view_as_blocks(frame, (32, 32))
 
-        # Merge each block
+        # Create empty frame
+        aligned_frame = np.zeros_like(frame)
+        
+
         for row_idx in range(tile_blocks.shape[0]):
             for col_idx in range(tile_blocks.shape[1]):
                 # Extract shifts for given block
-                shift = L0_shifts[tile_id, row_idx, col_idx, :].astype(int)
+                shift = shifts_32x32[frame_id, row_idx, col_idx, :].astype(int)
 
-                # Extract tile patch
+                # Extract the tile_patch of 16x16
                 tile_patch = tile_blocks[row_idx, col_idx, :, :]
 
                 # Offsets for getting patch from ref_tile
                 row_offset = row_idx * 32
                 col_offset = col_idx * 32
 
-                merge_block = merged_raw[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32]
+                # Extract a block from aligned_frame to see if it is valid
+                merge_block = aligned_frame[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32]
 
+                # Add the tile patch to the aligned frame
                 if merge_block.shape == (32,32):
-                    merged_raw[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = merged_raw[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] + tile_patch
+                    aligned_frame[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = tile_patch
 
-                    merge_pixel_map[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = merge_pixel_map[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] + 1
+        # Separate the color planes for future merging 
+        R_frame = aligned_frame[R[0]::2, R[1]::2]
+        Gr_frame = aligned_frame[Gr[0]::2, Gr[1]::2]
+        B_frame = aligned_frame[B[0]::2, B[1]::2]
+        Gb_frame = aligned_frame[Gb[0]::2, Gb[0]::2]
+
+        aligned_color_frames.append([R_frame, Gr_frame, B_frame, Gb_frame])
+
+    return np.stack(aligned_color_frames)
 
 
+def create_ref_frame(raw_imgs, ref_id, raw_pattern):
+    R, Gr, B, Gb = get_RGB_position(raw_pattern)
+
+    # Frame size extraction
+    frame_size = raw_imgs[ref_id, ...].shape
+
+    # Find padding size to make it perfect 32x32 blocks
+    pad_rows, pad_cols = 0, 0
+    if frame_size[0] % 32 != 0:
+        pad_rows = 32 - (frame_size[0] % 32)
     
-    merged_raw = merged_raw / merge_pixel_map
-    
-    R_frame = merged_raw[R[0]::2, R[1]::2]
-    Gr_frame = merged_raw[Gr[0]::2, Gr[1]::2]
-    B_frame = merged_raw[B[0]::2, B[1]::2]
-    Gb_frame = merged_raw[Gb[0]::2, Gb[0]::2]
+    if frame_size[1] % 32 != 0:
+        pad_cols = 32 - (frame_size[1] % 32)
 
-    G_frame = (Gr_frame + Gb_frame) / 2
+    ref_frame = raw_imgs[ref_id, ...]
 
-    max_r = np.max(R_frame)
-    max_g = np.max(G_frame)
-    max_b = np.max(B_frame)
+    # Pad to make the it perfect 16x16 blocks
+    ref_frame = np.pad(ref_frame, ((0, pad_rows), (0, pad_cols)), 'edge')
 
-    R_frame = R_frame * max_g / max_r
-    B_frame = R_frame * max_g / max_b
-    G_frame = G_frame
+    # Separate the color planes for future merging 
+    R_frame = ref_frame[R[0]::2, R[1]::2]
+    Gr_frame = ref_frame[Gr[0]::2, Gr[1]::2]
+    B_frame = ref_frame[B[0]::2, B[1]::2]
+    Gb_frame = ref_frame[Gb[0]::2, Gb[0]::2]
 
+    return np.stack([R_frame, Gr_frame, B_frame, Gb_frame])
 
-    img = np.dstack((B_frame, G_frame, R_frame))
+def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
+    aligned_color_frames = create_aligned_frames(raw_imgs, ref_id, L0_shifts, raw_pattern)
 
-    print(img.shape)
-    img = img / np.max(img)
-    # plt.imshow(img * 3)
+    ref_color_frame = create_ref_frame(raw_imgs, ref_id, raw_pattern)
+
+    merged_channels = merge_frames(aligned_color_frames, ref_color_frame)
+
+    # plt.imshow(merged_channels[0, ...], cmap="gray")
     # plt.show()
-
-    cv2.imshow("temp", img*4)
-    cv2.waitKey(0)
-
-    cv2.imwrite("t.png", (img * 255).astype(int) * 4)
-
-
     return 0
-
 
 def align_images(ref_id, raw_imgs, use_temp=True):
 
     temp_exists = os.path.isfile("./temp/L0_shifts.npy")
-    use_temp = 0
+
+    if (use_temp == 1):
+        temp_exists = os.path.isfile("./temp/L0_shifts.npy")
+
+        if temp_exists:
+            L0_shifts = np.load("./temp/L0_shifts.npy")
+        else:
+            use_temp = 0
+    
     if (use_temp == 0):
         # Create Gaussian scale pyramid
         img_lvls = create_scale_pyramid(raw_imgs)
@@ -622,7 +621,6 @@ def align_images(ref_id, raw_imgs, use_temp=True):
         # Align L3 (the smallest)
         print("Aligning L3 ...")
         L3_shifts = align_level_3(ref_id, img_lvls)
-        print(L3_shifts[4])
 
         # Align L2 using L3 shifts
         print("Aligning L2 ...")
@@ -640,13 +638,16 @@ def align_images(ref_id, raw_imgs, use_temp=True):
 
         # Save the L0 shifts
         np.save("./temp/L0_shifts.npy", L0_shifts)
-    else:
-        print("Temp shifts present...")
-
-        # Load the L0 shifts and return it
-        L0_shifts = np.load("./temp/L0_shifts.npy")
 
     return L0_shifts
+
+def rcwindow(h, w):
+  x = np.linspace(0., w, w, endpoint=False)
+  rcw_x = 0.5 - 0.5 * np.cos(2 * np.pi * (x + 0.5) / w)
+  y = np.linspace(0., h, h, endpoint=False )
+  rcw_y = 0.5 - 0.5 * np.cos(2 * np.pi * (y + 0.5) / h)
+  rcw =  rcw_y.reshape((h, 1)) * rcw_x.reshape((1, w))
+  return rcw
 
 def merge_frames(aligned_frames,ref_frame):
     """
@@ -664,35 +665,42 @@ def merge_frames(aligned_frames,ref_frame):
     assert(H==ref_frame.shape[1])
     assert(W==ref_frame.shape[2])
     
-    rcwin = np.zeros((16,16))
-    x = np.linspace(0,16,16,endpoint=False)
-    rcwin = (1/2) - (1/2)*np.cos(2*np.pi*(x+0.5)/16)
+    # Create Raised Cosine window
+    rcwin = rcwindow(16, 16)
     
-    merged = np.zeros((H,W,C))
+    # Create empty merged frame
+    merged_frame = np.zeros((C, H, W))
+
     for channel_id in range(C):
-        tile_blocks = skimage.util.shape.view_as_windows(np.reshape(ref_frame[channel_id,:,:],(H,W)), (16, 16),step=8)
+        # See as windows 16x16 with 8x8 overlaps
+        tile_blocks = skimage.util.shape.view_as_windows(ref_frame[channel_id, :, :], (16, 16),step=8)
+
         h,w,_,_ = tile_blocks.shape
+
         frame_tile_blocks = []
+
         for frame_id in range(N):
             frame = np.reshape(aligned_frames[frame_id,channel_id,:,:],(H,W))
             frame_tile_blocks.append(skimage.util.shape.view_as_windows(frame,(16,16),step=8))
-        for i in range(h):
+
+        for i in tqdm(range(h)):
             for j in range(w):
-                tile = np.multiply(tile_blocks(i,j,:,:),rcwin);
+                tile = tile_blocks[i,j,:,:] * rcwin
                 T0 = np.fft.fft2(tile)
                 T0clean = T0
+
                 for frame_id in range(N):
                     frame = frame_tile_blocks[frame_id]
-                    frame = frame[i,j,:,:].reshape(16,16)
-                    Ti = (np.fft.fft2(frame))
-                    D = np.abs(T0-Ti)
+                    Ti = (np.fft.fft2(frame[i, j, :, :]))
+                    D = np.abs(T0 - Ti)
                     k = 0.001
-                    Ai = D/(D+k)
+                    Ai = D / (D + k)
                     T0clean = T0clean + (((1-Ai)*Ti)+(Ai*T0))
-                T0clean = T0clean/N;
+
+                T0clean = T0clean / N
                 Imerge = np.real(np.fft.ifft2(T0clean))
-                merged[channel_id,i*8:8*i+16,j*8:8*j+16] = merged[channel_id,i*8:8*i+16,j*8:8*j+16] + Imerge
-    
-    return merged
-                    
-    
+
+                block = merged_frame[channel_id, i * 8 : 8 * i + 16, j * 8 : 8 * j + 16]
+                if block.shape == (16,16):
+                    merged_frame[channel_id, i*8 : 8*i+16, j*8 : 8*j+16] = merged_frame[channel_id, i*8 : 8*i+16, j*8 : 8*j+16] + Imerge
+    return merged_frame
