@@ -6,27 +6,9 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import cv2
 import rawpy
-#import helper
+import isp_helper
 import skimage.util
 
-def get_RGB_position(raw_pattern):
-    """ 
-    input: raw_pattern (np.ndarray) - The raw pattern
-    output: R, Gr_pos, B, Gb_pos - Green channel positions
-    """
-
-    assert(raw_pattern.shape == (2,2))
-
-    # Positions in the numpy file
-    R, Gr, B, Gb  = 0, 1, 2, 3
-    
-    # Get the positinos from the raw_pattern
-    R_pos = np.squeeze(np.argwhere(raw_pattern == R))
-    Gr_pos = np.squeeze(np.argwhere(raw_pattern == Gr))
-    B_pos = np.squeeze(np.argwhere(raw_pattern == B))
-    Gb_pos = np.squeeze(np.argwhere(raw_pattern == Gb))
-
-    return R_pos, Gr_pos, B_pos, Gb_pos
 
 def select_ref_frame(raw_imgs, raw_pattern):
     """ 
@@ -40,7 +22,7 @@ def select_ref_frame(raw_imgs, raw_pattern):
     assert(raw_pattern.shape == (2,2))
     assert(raw_imgs.shape[0] >= 3)
 
-    _, Gr, _, Gb = get_RGB_position(raw_pattern)
+    _, Gr, _, Gb = isp_helper.get_RGB_position(raw_pattern)
 
     Gr0 = raw_imgs[0, Gr[0]::2, Gr[1]::2]
     Gb0 = raw_imgs[0, Gb[0]::2, Gb[0]::2]
@@ -495,8 +477,7 @@ def align_level_0(ref_id, img_lvls, L1_shifts):
     return np.stack(align_shifts)
 
 def create_aligned_frames(raw_imgs, ref_id, shifts_16x16, raw_pattern):
-    print("Aligning frames ...")
-    R, Gr, B, Gb = get_RGB_position(raw_pattern)
+    R, Gr, B, Gb = isp_helper.get_RGB_position(raw_pattern)
 
     # Find the number of frames
     num_frames = raw_imgs.shape[0]
@@ -563,9 +544,8 @@ def create_aligned_frames(raw_imgs, ref_id, shifts_16x16, raw_pattern):
 
     return np.stack(aligned_color_frames)
 
-
 def create_ref_frame(raw_imgs, ref_id, raw_pattern):
-    R, Gr, B, Gb = get_RGB_position(raw_pattern)
+    R, Gr, B, Gb = isp_helper.get_RGB_position(raw_pattern)
 
     # Frame size extraction
     frame_size = raw_imgs[ref_id, ...].shape
@@ -592,17 +572,25 @@ def create_ref_frame(raw_imgs, ref_id, raw_pattern):
     return np.stack([R_frame, Gr_frame, B_frame, Gb_frame])
 
 def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
+    # Align all frames
     aligned_color_frames = create_aligned_frames(raw_imgs, ref_id, L0_shifts, raw_pattern)
 
+    # Separate out the color planes for the reference
     ref_color_frame = create_ref_frame(raw_imgs, ref_id, raw_pattern)
 
+    # Merge the aligned and reference color planes
     merged_channels = merge_frames(aligned_color_frames, ref_color_frame)
 
-    # plt.imshow(merged_channels[0, ...], cmap="gray")
-    # plt.show()
-    return 0
+    # np.save("merged_channels.npy", merged_channels)
+    # merged_channels = np.load("merged_channels.npy")
+
+    # Mosaic the merged channels
+    merged_raw = isp_helper.mosaic_image(merged_channels, raw_pattern)
+
+    return merged_raw
 
 def align_images(ref_id, raw_imgs, use_temp=True):
+    print("Finding alignments for other frames ...")
 
     temp_exists = os.path.isfile("./temp/L0_shifts.npy")
 

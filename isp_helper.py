@@ -8,6 +8,26 @@ import cv2
 import rawpy
 
 
+def get_RGB_position(raw_pattern):
+    """ 
+    input: raw_pattern (np.ndarray) - The raw pattern
+    output: R, Gr_pos, B, Gb_pos - Green channel positions
+    """
+
+    assert(raw_pattern.shape == (2,2))
+
+    # Positions in the numpy file
+    R, Gr, B, Gb  = 0, 1, 2, 3
+    
+    # Get the positinos from the raw_pattern
+    R_pos = np.squeeze(np.argwhere(raw_pattern == R))
+    Gr_pos = np.squeeze(np.argwhere(raw_pattern == Gr))
+    B_pos = np.squeeze(np.argwhere(raw_pattern == B))
+    Gb_pos = np.squeeze(np.argwhere(raw_pattern == Gb))
+
+    return R_pos, Gr_pos, B_pos, Gb_pos
+
+
 def get_raw(input_dir, use_temp, verbose=True):
     """
     Input: (str) input_dir
@@ -57,7 +77,7 @@ def get_raw(input_dir, use_temp, verbose=True):
 
         raw_imgs = np.stack(raw_imgs)
         np.save("./temp/raw_imgs.npy", raw_imgs)
-        
+
     return raw_imgs
 
 def get_raw_object(input_dir, ref_id=0):
@@ -73,6 +93,21 @@ def get_raw_object(input_dir, ref_id=0):
     # Use reference frame as the object
     rp_im = rawpy.imread(raw_files[ref_id])
     return rp_im
+
+def mosaic_image(color_planes, raw_pattern):
+    R, Gr, B, Gb = get_RGB_position(raw_pattern)
+    C, H, W = color_planes.shape
+
+    assert(C == 4)
+    
+    mosaic_frame = np.zeros((H*2, W *2))
+
+    mosaic_frame[R[0]::2, R[1]::2] = color_planes[0, ...]
+    mosaic_frame[Gr[0]::2, Gr[1]::2] = color_planes[1, ...]
+    mosaic_frame[B[0]::2, B[1]::2] = color_planes[2, ...]
+    mosaic_frame[Gb[0]::2, Gb[0]::2] = color_planes[3, ...]
+
+    return mosaic_frame
 
 
 

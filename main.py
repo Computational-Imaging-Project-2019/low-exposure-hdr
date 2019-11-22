@@ -7,6 +7,7 @@ import time
 import cv2
 import align_merge
 import rawpy
+import matplotlib.pyplot as plt 
 
 def get_args():
     parser = argparse.ArgumentParser(description="HDR+: Low exposure images to HDR")
