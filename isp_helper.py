@@ -27,6 +27,16 @@ def get_RGB_position(raw_pattern):
 
     return R_pos, Gr_pos, B_pos, Gb_pos
 
+def rgb_to_bgr(img):
+    bgr_img = np.zeros_like(img)
+    bgr_img[:, :, 0] = img[:, :, 2]
+    bgr_img[:, :, 1] = img[:, :, 1]
+    bgr_img[:, :, 2] = img[:, :, 0]
+
+    return bgr_img
+
+def bgr_to_rgb(img):
+    return rgb_to_bgr(img)
 
 def get_raw(input_dir, use_temp, verbose=True):
     """
@@ -132,24 +142,68 @@ def apply_white_balance(raw, raw_obj):
 
     R, Gr, B, Gb = get_RGB_position(raw_obj.raw_pattern)
 
-    # Q: Why is the last green plane multiplier 0?
+    # TODO: Q: Why is the last green plane multiplier 0?
     wb_multipliers[-1] = 1.0
 
+    # Multiply the channels with the multipliers
     raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] * wb_multipliers[0]
     raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] * wb_multipliers[1]
     raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] * wb_multipliers[2]
     raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] * wb_multipliers[3]
 
+    # Normalize the channels
+    raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] / np.max(raw[R[0]::2, R[1]::2])
+    raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] / np.max(raw[Gr[0]::2, Gr[1]::2])
+    raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] / np.max(raw[B[0]::2, B[1]::2])
+    raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] / np.max(raw[Gb[0]::2, Gb[0]::2])
+
     return raw
 
-def process(merged_raw, ref_id, raw_obj):
+def lens_shading_correction(img, ref_id):
+    pass
+
+def chroma_denoising(img):
+    # TODO: Loss of precision here, is there somthing better that can be done?
+    yuv_img = cv2.cvtColor(img.astype(np.single), cv2.COLOR_RGB2YUV)
+
+    # TODO: Check strength of bilateral filter
+    yuv_img[:, :, 1] = cv2.bilateralFilter(yuv_img[:, :, 1], d=3, sigmaColor=30, sigmaSpace=30)
+    yuv_img[:, :, 2] = cv2.bilateralFilter(yuv_img[:, :, 2], d=3, sigmaColor=30, sigmaSpace=30)
+
+    rgb_img = cv2.cvtColor(yuv_img, cv2.COLOR_YUV2RGB)
+
+    return rgb_img
+    
+def color_correction(img, in_path):
+    rgb2rgb = np.loadtxt("{}/rgb2rgb.txt".format(in_path))
+    rgb2rgb = rgb2rgb.reshape(3,3)
+
+    # TODO: Is this right?
+    cc_img = rgb2rgb @ img.transpose([2,1,0]).reshape(3, -1)
+
+    cc_img = cc_img.reshape(3, img.shape[1], img.shape[0]).transpose([2,1,0])
+
+    # TODO: Should we normalize?
+    cc_img = cc_img / np.max(cc_img, axis=(0,1)).reshape(1,-1)
+
+    return cc_img
+
+def process(merged_raw, ref_id, raw_obj, args):
     # White balance the raw
     wb_raw = apply_white_balance(merged_raw, raw_obj)
 
     # Demosaic image
     dmsc_img = demosaic_image(wb_raw, raw_obj.raw_pattern)
 
-    return dmsc_img
+    # Chroma denoising
+    rgb_img = chroma_denoising(dmsc_img)
+
+    # Perform Color Correction
+    cc_img = color_correction(rgb_img, args.input)
+    
+    
+
+    return cc_img
 
 
 

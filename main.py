@@ -64,7 +64,8 @@ if __name__ == "__main__":
     raw_obj = isp_helper.get_raw_object(args.input, ref_id=ref_frame_id)
 
     # Process the image
-    final_img = isp_helper.process(merged_raw, ref_frame_id, raw_obj)
+    print("Processing merged raw ...")
+    final_img = isp_helper.process(merged_raw, ref_frame_id, raw_obj, args)
 
     end_time = time.time()
     print("Total time taken: {}".format(end_time - start_time))
