@@ -56,8 +56,15 @@ if __name__ == "__main__":
     # Or every 16x16 block for demosaiced image
     raw_shifts = align_merge.align_images(ref_frame_id, raw_imgs)
 
+    # After finding all the shifts, merge it with the ref frame to create a bayered merged frame which has lower noise
     print("Merging frames ...")
     merged_raw = align_merge.merge_raws(raw_imgs, ref_frame_id, raw_shifts, raw_obj.raw_pattern)
+
+    # Get the raw object associated with the merged_raw
+    raw_obj = isp_helper.get_raw_object(args.input, ref_id=ref_frame_id)
+
+    # Process the image
+    final_img = isp_helper.process(merged_raw, ref_frame_id, raw_obj)
 
     end_time = time.time()
     print("Total time taken: {}".format(end_time - start_time))

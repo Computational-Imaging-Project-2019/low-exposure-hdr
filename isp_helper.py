@@ -99,7 +99,7 @@ def mosaic_image(color_planes, raw_pattern):
     C, H, W = color_planes.shape
 
     assert(C == 4)
-    
+
     mosaic_frame = np.zeros((H*2, W *2))
 
     mosaic_frame[R[0]::2, R[1]::2] = color_planes[0, ...]
@@ -108,6 +108,48 @@ def mosaic_image(color_planes, raw_pattern):
     mosaic_frame[Gb[0]::2, Gb[0]::2] = color_planes[3, ...]
 
     return mosaic_frame
+
+def demosaic_image(raw, raw_pattern):
+    R, Gr, B, Gb = get_RGB_position(raw_pattern)
+
+    R_frame = raw[R[0]::2, R[1]::2]
+    Gr_frame = raw[Gr[0]::2, Gr[1]::2]
+    B_frame = raw[B[0]::2, B[1]::2]
+    Gb_frame = raw[Gb[0]::2, Gb[0]::2]
+
+    R_full_frame = cv2.resize(R_frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    Gr_full_frame = cv2.resize(Gr_frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    B_full_frame = cv2.resize(B_frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    Gb_full_frame = cv2.resize(Gb_frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+
+    G_full_frame = (Gr_full_frame + Gb_full_frame) / 2
+
+    return np.stack((R_full_frame, G_full_frame, B_full_frame), axis=2)
+
+def apply_white_balance(raw, raw_obj):
+    # Get the multipliers from the camera
+    wb_multipliers = raw_obj.camera_whitebalance
+
+    R, Gr, B, Gb = get_RGB_position(raw_obj.raw_pattern)
+
+    # Q: Why is the last green plane multiplier 0?
+    wb_multipliers[-1] = 1.0
+
+    raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] * wb_multipliers[0]
+    raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] * wb_multipliers[1]
+    raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] * wb_multipliers[2]
+    raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] * wb_multipliers[3]
+
+    return raw
+
+def process(merged_raw, ref_id, raw_obj):
+    # White balance the raw
+    wb_raw = apply_white_balance(merged_raw, raw_obj)
+
+    # Demosaic image
+    dmsc_img = demosaic_image(wb_raw, raw_obj.raw_pattern)
+
+    return dmsc_img
 
 
 

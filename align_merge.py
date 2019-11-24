@@ -579,10 +579,10 @@ def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
     ref_color_frame = create_ref_frame(raw_imgs, ref_id, raw_pattern)
 
     # Merge the aligned and reference color planes
-    merged_channels = merge_frames(aligned_color_frames, ref_color_frame)
+    # merged_channels = merge_frames(aligned_color_frames, ref_color_frame)
 
     # np.save("merged_channels.npy", merged_channels)
-    # merged_channels = np.load("merged_channels.npy")
+    merged_channels = np.load("merged_channels.npy")
 
     # Mosaic the merged channels
     merged_raw = isp_helper.mosaic_image(merged_channels, raw_pattern)
