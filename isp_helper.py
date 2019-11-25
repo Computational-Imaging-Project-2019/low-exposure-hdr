@@ -162,15 +162,29 @@ def apply_white_balance(raw, raw_obj):
 def lens_shading_correction(img, ref_id):
     pass
 
-def chroma_denoising(img):
-    # TODO: Loss of precision here, is there somthing better that can be done?
-    yuv_img = cv2.cvtColor(img.astype(np.single), cv2.COLOR_RGB2YUV)
+def chroma_denoising(img, cspace="LAB"):
 
-    # TODO: Check strength of bilateral filter
-    yuv_img[:, :, 1] = cv2.bilateralFilter(yuv_img[:, :, 1], d=3, sigmaColor=30, sigmaSpace=30)
-    yuv_img[:, :, 2] = cv2.bilateralFilter(yuv_img[:, :, 2], d=3, sigmaColor=30, sigmaSpace=30)
+    if cspace == "LAB":
+        # TODO: Loss of precision here, is there somthing better that can be done?
+        lab_img = cv2.cvtColor(img.astype(np.single), cv2.COLOR_RGB2LAB)
 
-    rgb_img = cv2.cvtColor(yuv_img, cv2.COLOR_YUV2RGB)
+        # TODO: Check strength of bilateral filter
+        lab_img[:, :, 1] = cv2.bilateralFilter(lab_img[:, :, 1], d=3, sigmaColor=30, sigmaSpace=30)
+        lab_img[:, :, 2] = cv2.bilateralFilter(lab_img[:, :, 2], d=3, sigmaColor=30, sigmaSpace=30)
+
+        rgb_img = cv2.cvtColor(lab_img, cv2.COLOR_LAB2RGB)
+
+    elif cspace == "YUV":
+        # TODO: Loss of precision here, is there somthing better that can be done?
+        yuv_img = cv2.cvtColor(img.astype(np.single), cv2.COLOR_RGB2YUV)
+
+        # TODO: Check strength of bilateral filter
+        yuv_img[:, :, 1] = cv2.bilateralFilter(yuv_img[:, :, 1], d=3, sigmaColor=30, sigmaSpace=30)
+        yuv_img[:, :, 2] = cv2.bilateralFilter(yuv_img[:, :, 2], d=3, sigmaColor=30, sigmaSpace=30)
+
+        rgb_img = cv2.cvtColor(yuv_img, cv2.COLOR_YUV2RGB)
+    else:
+        rgb_img = img
 
     return rgb_img
     
@@ -182,6 +196,9 @@ def color_correction(img, in_path):
     cc_img = rgb2rgb @ img.transpose([2,1,0]).reshape(3, -1)
 
     cc_img = cc_img.reshape(3, img.shape[1], img.shape[0]).transpose([2,1,0])
+
+    # All negative color should be pushed to 0
+    cc_img[cc_img < 0] = 0
 
     # TODO: Should we normalize?
     cc_img = cc_img / np.max(cc_img, axis=(0,1)).reshape(1,-1)
@@ -195,13 +212,12 @@ def process(merged_raw, ref_id, raw_obj, args):
     # Demosaic image
     dmsc_img = demosaic_image(wb_raw, raw_obj.raw_pattern)
 
-    # Chroma denoising
-    rgb_img = chroma_denoising(dmsc_img)
+    # Chroma denoising - Using LAB color space instead of YUV
+    rgb_img = chroma_denoising(dmsc_img, cspace="LAB")
 
     # Perform Color Correction
     cc_img = color_correction(rgb_img, args.input)
-    
-    
+
 
     return cc_img
 
