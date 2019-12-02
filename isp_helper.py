@@ -152,6 +152,7 @@ def apply_white_balance(raw, raw_obj):
     raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] * wb_multipliers[3]
 
     # Normalize the channels
+    # TODO: Do you normalize or do you clip between (0, 255)?
     raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] / np.max(raw[R[0]::2, R[1]::2])
     raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] / np.max(raw[Gr[0]::2, Gr[1]::2])
     raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] / np.max(raw[B[0]::2, B[1]::2])
@@ -159,8 +160,24 @@ def apply_white_balance(raw, raw_obj):
 
     return raw
 
-def lens_shading_correction(img, ref_id):
-    pass
+def lens_shading_correction(img, ref_id, input_path):
+    if ref_id < 10:
+        f_name = input_path + "/lens_shading_map_N00{}.tiff".format(ref_id)
+    else:
+        f_name = input_path + "/lens_shading_map_N0{}.tiff".format(ref_id)
+
+    exists = os.path.isfile(f_name)
+
+    # If lens shading file not provided
+    if not exists:
+        return img
+
+    # TODO: Not able to load a 4-channel TIFF file for lens shading correction
+    lsc_matrix = plt.imread(f_name)
+
+    # TODO: What to do with this? Multiply?
+
+    
 
 def chroma_denoising(img, cspace="LAB"):
 
@@ -206,6 +223,9 @@ def color_correction(img, in_path):
     return cc_img
 
 def process(merged_raw, ref_id, raw_obj, args):
+    # Apply Lens shading correction
+    # corr_raw = lens_shading_correction(merged_raw, ref_id, args.input)
+
     # White balance the raw
     wb_raw = apply_white_balance(merged_raw, raw_obj)
 
