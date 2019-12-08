@@ -115,7 +115,7 @@ def mosaic_image(color_planes, raw_pattern):
     mosaic_frame[R[0]::2, R[1]::2] = color_planes[0, ...]
     mosaic_frame[Gr[0]::2, Gr[1]::2] = color_planes[1, ...]
     mosaic_frame[B[0]::2, B[1]::2] = color_planes[2, ...]
-    mosaic_frame[Gb[0]::2, Gb[0]::2] = color_planes[3, ...]
+    mosaic_frame[Gb[0]::2, Gb[1]::2] = color_planes[3, ...]
 
     return mosaic_frame
 
@@ -143,20 +143,13 @@ def apply_white_balance(raw, raw_obj):
     R, Gr, B, Gb = get_RGB_position(raw_obj.raw_pattern)
 
     # TODO: Q: Why is the last green plane multiplier 0?
-    wb_multipliers[-1] = 1.0
+    wb_multipliers[-1] = wb_multipliers[1]
 
     # Multiply the channels with the multipliers
     raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] * wb_multipliers[0]
     raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] * wb_multipliers[1]
     raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] * wb_multipliers[2]
     raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] * wb_multipliers[3]
-
-    # Normalize the channels
-    # TODO: Do you normalize or do you clip between (0, 255)?
-    raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] / np.max(raw[R[0]::2, R[1]::2])
-    raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] / np.max(raw[Gr[0]::2, Gr[1]::2])
-    raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] / np.max(raw[B[0]::2, B[1]::2])
-    raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] / np.max(raw[Gb[0]::2, Gb[0]::2])
 
     return raw
 
@@ -177,13 +170,14 @@ def lens_shading_correction(img, ref_id, input_path):
 
     # TODO: What to do with this? Multiply?
 
-    
-
 def chroma_denoising(img, cspace="LAB"):
+
+    # Nomarlize 16 - bit to single floating point
+    img = img / 65535
 
     if cspace == "LAB":
         # TODO: Loss of precision here, is there somthing better that can be done?
-        lab_img = cv2.cvtColor(img.astype(np.single), cv2.COLOR_RGB2LAB)
+        lab_img = cv2.cvtColor(img.astype('single'), cv2.COLOR_RGB2LAB)
 
         # TODO: Check strength of bilateral filter
         lab_img[:, :, 1] = cv2.bilateralFilter(lab_img[:, :, 1], d=3, sigmaColor=30, sigmaSpace=30)
@@ -193,7 +187,7 @@ def chroma_denoising(img, cspace="LAB"):
 
     elif cspace == "YUV":
         # TODO: Loss of precision here, is there somthing better that can be done?
-        yuv_img = cv2.cvtColor(img.astype(np.single), cv2.COLOR_RGB2YUV)
+        yuv_img = cv2.cvtColor(img.astype('single'), cv2.COLOR_RGB2YUV)
 
         # TODO: Check strength of bilateral filter
         yuv_img[:, :, 1] = cv2.bilateralFilter(yuv_img[:, :, 1], d=3, sigmaColor=30, sigmaSpace=30)
@@ -218,28 +212,81 @@ def color_correction(img, in_path):
     cc_img[cc_img < 0] = 0
 
     # TODO: Should we normalize?
-    cc_img = cc_img / np.max(cc_img, axis=(0,1)).reshape(1,-1)
+    # cc_img = cc_img / np.max(cc_img, axis=(0,1)).reshape(1,-1)
 
     return cc_img
+
+def gamma_correct(img, show=1, name="result.jpg"):
+
+    mask = img > 0.0031308
+
+    img[mask] **= 0.4167
+    img[mask] *= 1.055
+    img[mask] -= 0.055
+
+    img[np.invert(mask)] *= 12.92
+
+    img = np.clip(img, 0, 1)
+
+    if show:
+        cv2.imwrite(name, np.uint8(255 * img))
+
+    return img
 
 def process(merged_raw, ref_id, raw_obj, args):
     # Apply Lens shading correction
     # corr_raw = lens_shading_correction(merged_raw, ref_id, args.input)
+    cv2.imwrite("merged_raw.tiff", merged_raw.astype(np.uint16))
+    exit()
 
     # White balance the raw
-    wb_raw = apply_white_balance(merged_raw, raw_obj)
+    # wb_raw = apply_white_balance(merged_raw, raw_obj)
 
     # Demosaic image
-    dmsc_img = demosaic_image(wb_raw, raw_obj.raw_pattern)
+    # dmsc_img = demosaic_image(merged_raw, raw_obj.raw_pattern)
 
     # Chroma denoising - Using LAB color space instead of YUV
-    rgb_img = chroma_denoising(dmsc_img, cspace="LAB")
+    # rgb_img = chroma_denoising(dmsc_img, cspace="LAB")
 
-    # Perform Color Correction
-    cc_img = color_correction(rgb_img, args.input)
+    # # Perform Color Correction
+    # cc_img = color_correction(rgb_img, args.input)  
+
+    # gamma_correct(dmsc_img / 65535 * 5, name="1.jpg")
+
+    # gamma_correct(rgb_img * 5, name="1.jpg")
+    # gamma_correct(cc_img * 20, name="2.jpg")
+
+    # exit()
+
+    
+
+    # print(np.max(dmsc_img), np.min(dmsc_img))
+    # print(np.max(rgb_img), np.min(rgb_img))
+    # print(np.max(cc_img), np.min(cc_img))
+
+    # exit()
+
+    # Low Exposure Image
+    # short_exp_img = rgb_img
+
+    # Synthetic High exposure image
+    # long_exp_img = short_exp_img * 2
+
+    # gamma_correct(short_exp_img, name="dark.jpg")
+    # gamma_correct(long_exp_img, name="bright.jpg")
+
+    # merge_mertens = cv2.createMergeMertens()
+    # res_mertens = merge_mertens.process([short_exp_img.astype('single'), long_exp_img.astype('single')])
+
+    # tonemap = cv2.createTonemapDurand(2.2)
+    # ldr = tonemap.process((dmsc_img / 65535).astype('single'))
+
+    # gamma_correct(ldr, name="out.jpg")
 
 
-    return cc_img
+    # return cc_img
+
+    pass
 
 
 
