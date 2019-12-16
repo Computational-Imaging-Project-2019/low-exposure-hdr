@@ -43,6 +43,8 @@ if __name__ == "__main__":
     # get raw object to indentify image parameters
     raw_obj = isp_helper.get_raw_object(args.input)
 
+    print(isp_helper.get_RGB_position(raw_obj.raw_pattern))
+
     # STEP 1: ALIGN
     # select reference frame
     ref_frame_id = align_merge.select_ref_frame(raw_imgs, raw_obj.raw_pattern)
@@ -58,10 +60,30 @@ if __name__ == "__main__":
 
     # After finding all the shifts, merge it with the ref frame to create a bayered merged frame which has lower noise
     print("Merging frames ...")
-    merged_raw = align_merge.merge_raws(raw_imgs, ref_frame_id, raw_shifts, raw_obj.raw_pattern)
+    merged_raw, aligned_raw = align_merge.merge_raws(raw_imgs, ref_frame_id, raw_shifts, raw_obj.raw_pattern)
 
     # Get the raw object associated with the merged_raw
     raw_obj = isp_helper.get_raw_object(args.input, ref_id=ref_frame_id)
+    print(raw_obj.camera_whitebalance)
+
+
+
+    raw_obj.raw_image_visible[:] = merged_raw[:raw_obj.raw_image_visible.shape[0], :raw_obj.raw_image_visible.shape[1]]
+
+    final_img = raw_obj.postprocess(bright=4.0)
+
+    raw_obj.raw_image_visible[:] = aligned_raw[:raw_obj.raw_image_visible.shape[0], :raw_obj.raw_image_visible.shape[1]]
+
+    final_img2 = raw_obj.postprocess(bright=4.0)
+
+    raw_obj.raw_image_visible[:] = raw_imgs.mean(axis=0)[:raw_obj.raw_image_visible.shape[0], :raw_obj.raw_image_visible.shape[1]]
+
+    final_img3 = raw_obj.postprocess(bright=4.0)
+
+#     plt.imshow(final_img)
+#     plt.show()
+
+    # cv2.imwrite("WH_dcraw.jpg", final_img[:, :, ::-1])
 
     # Process the image
     print("Processing merged raw ...")

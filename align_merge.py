@@ -25,7 +25,7 @@ def select_ref_frame(raw_imgs, raw_pattern):
     _, Gr, _, Gb = isp_helper.get_RGB_position(raw_pattern)
 
     Gr0 = raw_imgs[0, Gr[0]::2, Gr[1]::2]
-    Gb0 = raw_imgs[0, Gb[0]::2, Gb[0]::2]
+    Gb0 = raw_imgs[0, Gb[0]::2, Gb[1]::2]
     
     Gr1 = raw_imgs[1, Gr[0]::2, Gr[1]::2]
     Gb1 = raw_imgs[1, Gb[0]::2, Gb[1]::2]
@@ -538,7 +538,7 @@ def create_aligned_frames(raw_imgs, ref_id, shifts_16x16, raw_pattern):
         R_frame = aligned_frame[R[0]::2, R[1]::2]
         Gr_frame = aligned_frame[Gr[0]::2, Gr[1]::2]
         B_frame = aligned_frame[B[0]::2, B[1]::2]
-        Gb_frame = aligned_frame[Gb[0]::2, Gb[0]::2]
+        Gb_frame = aligned_frame[Gb[0]::2, Gb[1]::2]
 
         aligned_color_frames.append([R_frame, Gr_frame, B_frame, Gb_frame])
 
@@ -567,29 +567,102 @@ def create_ref_frame(raw_imgs, ref_id, raw_pattern):
     R_frame = ref_frame[R[0]::2, R[1]::2]
     Gr_frame = ref_frame[Gr[0]::2, Gr[1]::2]
     B_frame = ref_frame[B[0]::2, B[1]::2]
-    Gb_frame = ref_frame[Gb[0]::2, Gb[0]::2]
+    Gb_frame = ref_frame[Gb[0]::2, Gb[1]::2]
 
     return np.stack([R_frame, Gr_frame, B_frame, Gb_frame])
+
+def create_average_aligned_frame(raw_imgs, ref_id, shifts_16x16):
+
+    # Find the number of frames
+    num_frames = raw_imgs.shape[0]
+
+    # Frame size extraction
+    frame_size = raw_imgs[0, ...].shape
+
+    # Create shifts fpr 32x32 blocks instead of 16x16 
+    shifts_32x32 = np.repeat(np.repeat(shifts_16x16, 2, axis = 1), 2, axis = 2)
+
+    # Find padding size to make it perfect 32x32 blocks
+    pad_rows, pad_cols = 0, 0
+    if frame_size[0] % 32 != 0:
+        pad_rows = 32 - (frame_size[0] % 32)
+    
+    if frame_size[1] % 32 != 0:
+        pad_cols = 32 - (frame_size[1] % 32)
+
+    # aligned_color_frames = []
+    # Create empty frame
+    aligned_frame = np.zeros_like(raw_imgs[0, ...])
+    merge_map = np.zeros_like(raw_imgs[0, ...])
+
+    for frame_id in range(num_frames):
+        # if ref_id == frame_id:
+        #     continue
+
+        # Extract the needed frame
+        frame = raw_imgs[frame_id, ...]
+
+        # Pad to make the it perfect 16x16 blocks
+        frame = np.pad(frame, ((0, pad_rows), (0, pad_cols)), 'edge')
+
+        #  Convert the frame into blocks of 32x32
+        tile_blocks = skimage.util.view_as_blocks(frame, (32, 32))
+
+        for row_idx in range(tile_blocks.shape[0]):
+            for col_idx in range(tile_blocks.shape[1]):
+                # Extract shifts for given block
+                shift = shifts_32x32[frame_id, row_idx, col_idx, :].astype(int)
+
+                # Extract the tile_patch of 16x16
+                tile_patch = tile_blocks[row_idx, col_idx, :, :]
+
+                # Offsets for getting patch from ref_tile
+                row_offset = row_idx * 32
+                col_offset = col_idx * 32
+
+                # Extract a block from aligned_frame to see if it is valid
+                merge_block = aligned_frame[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32]
+
+                # Add the tile patch to the aligned frame
+                if merge_block.shape == (32,32):
+                    aligned_frame[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = aligned_frame[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] + tile_patch
+
+                    merge_map[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] = merge_map[row_offset + shift[0] : row_offset + shift[0] + 32, col_offset + shift[1] : col_offset + shift[1] + 32] + 1
+
+    aligned_frame = aligned_frame / merge_map 
+
+    # # Separate the color planes for future merging 
+    # R_frame = aligned_frame[R[0]::2, R[1]::2]
+    # Gr_frame = aligned_frame[Gr[0]::2, Gr[1]::2]
+    # B_frame = aligned_frame[B[0]::2, B[1]::2]
+    # Gb_frame = aligned_frame[Gb[0]::2, Gb[1]::2]
+
+    return aligned_frame
+
 
 def merge_raws(raw_imgs, ref_id, L0_shifts, raw_pattern):
     # Align all frames
     aligned_color_frames = create_aligned_frames(raw_imgs, ref_id, L0_shifts, raw_pattern)
 
+    alinged_raw = create_average_aligned_frame(raw_imgs, ref_id, L0_shifts)
+
+
+
     # Separate out the color planes for the reference
     ref_color_frame = create_ref_frame(raw_imgs, ref_id, raw_pattern)
 
     # Merge the aligned and reference color planes
-    # merged_channels = merge_frames(aligned_color_frames, ref_color_frame)
+    merged_channels = merge_frames(aligned_color_frames, ref_color_frame)
 
     # np.save("merged_channels.npy", merged_channels)
-    merged_channels = np.load("merged_channels.npy")
+    # merged_channels = np.load("merged_channels.npy")
 
     # Mosaic the merged channels
     merged_raw = isp_helper.mosaic_image(merged_channels, raw_pattern)
 
-    return merged_raw
+    return merged_raw, alinged_raw
 
-def align_images(ref_id, raw_imgs, use_temp=True):
+def align_images(ref_id, raw_imgs, use_temp=False):
     print("Finding alignments for other frames ...")
 
     temp_exists = os.path.isfile("./temp/L0_shifts.npy")

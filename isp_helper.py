@@ -125,7 +125,7 @@ def demosaic_image(raw, raw_pattern):
     R_frame = raw[R[0]::2, R[1]::2]
     Gr_frame = raw[Gr[0]::2, Gr[1]::2]
     B_frame = raw[B[0]::2, B[1]::2]
-    Gb_frame = raw[Gb[0]::2, Gb[0]::2]
+    Gb_frame = raw[Gb[0]::2, Gb[1]::2]
 
     R_full_frame = cv2.resize(R_frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     Gr_full_frame = cv2.resize(Gr_frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
@@ -149,7 +149,7 @@ def apply_white_balance(raw, raw_obj):
     raw[R[0]::2, R[1]::2] = raw[R[0]::2, R[1]::2] * wb_multipliers[0]
     raw[Gr[0]::2, Gr[1]::2] = raw[Gr[0]::2, Gr[1]::2] * wb_multipliers[1]
     raw[B[0]::2, B[1]::2] = raw[B[0]::2, B[1]::2] * wb_multipliers[2]
-    raw[Gb[0]::2, Gb[0]::2] = raw[Gb[0]::2, Gb[0]::2] * wb_multipliers[3]
+    raw[Gb[0]::2, Gb[1]::2] = raw[Gb[0]::2, Gb[1]::2] * wb_multipliers[3]
 
     return raw
 
@@ -236,8 +236,8 @@ def gamma_correct(img, show=1, name="result.jpg"):
 def process(merged_raw, ref_id, raw_obj, args):
     # Apply Lens shading correction
     # corr_raw = lens_shading_correction(merged_raw, ref_id, args.input)
-    cv2.imwrite("merged_raw.tiff", merged_raw.astype(np.uint16))
-    exit()
+    cv2.imwrite("merged_raw_flower.tiff", merged_raw.astype(np.uint16))
+    return 0
 
     # White balance the raw
     # wb_raw = apply_white_balance(merged_raw, raw_obj)
